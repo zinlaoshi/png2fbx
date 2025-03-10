@@ -179,7 +179,7 @@ namespace Zin.Png2Fbx.Editor
         }
         static string ConvertRelativePath(string absolutePath)
         {
-            var rootAssetIndex = absolutePath.IndexOf("/Assets/") + 1;
+            var rootAssetIndex = absolutePath.IndexOf("/Assets") + 1;
             return absolutePath.Substring(rootAssetIndex, absolutePath.Length - rootAssetIndex);
         }
     }
