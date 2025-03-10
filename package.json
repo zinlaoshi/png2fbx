@@ -1,0 +1,21 @@
+{
+  "name": "com.github.zinlaoshi.png2fbx",
+  "version": "1.0.0",
+  "displayName": "png2fbx",
+  "description": "This is an example package",
+  "unity": "2022.3",
+  "unityRelease": "0b5",
+  "documentationUrl": "https://github.com/zinlaoshi",
+  "changelogUrl": "https://github.com/zinlaoshi/changelog.html",
+  "licensesUrl": "https://github.com/zinlaoshi/png2fbx/blob/main/LICENSE",
+  "dependencies": {
+         "com.unity.formats.fbx": "4.2.1"
+   },
+  "keywords": [
+  ],
+  "author": {
+    "name": "zin.laoshi",
+    "email": "zin.laoshi@gmail.com",
+    "url": "https://github.com/zinlaoshi"
+  }
+}
