@@ -1,15 +1,18 @@
 using UnityEngine;
 using UnityEditor;
+using UnityEngine.Tilemaps;
+using System.Collections.Generic;
 
 namespace Zin.Png2Fbx.Editor
 {
     public static class Png2FbxExporter
     {
-        const string MenuRootPath = "Assets/Zin/";
-        [MenuItem(MenuRootPath + nameof(ExportSubSprites), true)]
+        const string MenuAssetRootPath = "Assets/Zin/";
+        const string MenuGameObjectRootPath = "GameObject/Zin/";
+        [MenuItem(MenuAssetRootPath + nameof(ExportSubSprites), true)]
         private static bool CanExportSubSprites() => Selection.activeObject is Sprite;
 
-        [MenuItem(MenuRootPath + nameof(ExportSubSprites))]
+        [MenuItem(MenuAssetRootPath + nameof(ExportSubSprites))]
         public static void ExportSubSprites()
         {
             var folder = EditorUtility.OpenFolderPanel("Export folder", "", "");
@@ -82,9 +85,9 @@ namespace Zin.Png2Fbx.Editor
             return filePath;
         }
 
-        [MenuItem(MenuRootPath + nameof(CreateMaterialsFromPng), true)]
+        [MenuItem(MenuAssetRootPath + nameof(CreateMaterialsFromPng), true)]
         private static bool CanCreateMaterialsFromPng() => Selection.activeObject is Texture2D;
-        [MenuItem(MenuRootPath + nameof(CreateMaterialsFromPng))]
+        [MenuItem(MenuAssetRootPath + nameof(CreateMaterialsFromPng))]
         private static void CreateMaterialsFromPng()
         {
             var folder = EditorUtility.OpenFolderPanel("Export folder", "", "");
@@ -112,9 +115,9 @@ namespace Zin.Png2Fbx.Editor
             return newAssetName;
         }
 
-        [MenuItem(MenuRootPath + nameof(CreateQuadFBXFromMaterials), true)]
+        [MenuItem(MenuAssetRootPath + nameof(CreateQuadFBXFromMaterials), true)]
         private static bool CanCreateQuadFBXFromMaterials() => Selection.activeObject is Material;
-        [MenuItem(MenuRootPath + nameof(CreateQuadFBXFromMaterials))]
+        [MenuItem(MenuAssetRootPath + nameof(CreateQuadFBXFromMaterials))]
         private static void CreateQuadFBXFromMaterials()
         {
             var folder = EditorUtility.OpenFolderPanel("Export folder", "", "");
@@ -140,13 +143,13 @@ namespace Zin.Png2Fbx.Editor
 
             GameObject.DestroyImmediate(quad);
         }
-        [MenuItem(MenuRootPath + nameof(CreateQuadFBXFromSubSprites), true)]
+        [MenuItem(MenuAssetRootPath + nameof(CreateQuadFBXFromSubSprites), true)]
         private static bool CanCreateQuadFBXFromSubSprites()
         {
             return Selection.activeObject is Sprite;
         }
 
-        [MenuItem(MenuRootPath + nameof(CreateQuadFBXFromSubSprites))]
+        [MenuItem(MenuAssetRootPath + nameof(CreateQuadFBXFromSubSprites))]
         private static void CreateQuadFBXFromSubSprites()
         {
             var folder = EditorUtility.OpenFolderPanel("Export folder", "", "");
@@ -176,6 +179,84 @@ namespace Zin.Png2Fbx.Editor
                 var selectedMaterial = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
                 SaveQuadFBXFromMateral(selectedMaterial, fbxFolder);
             }
+        }
+        [MenuItem(MenuGameObjectRootPath + nameof(ConvertQuadFromGrid), true)]
+        private static bool CanCreateQuadFBXFromGrid()
+        {
+            if (Selection.activeObject is GameObject)
+            {
+                return (Selection.activeObject as GameObject).TryGetComponent<Grid>(out var comp);
+            }
+
+            return false;
+        }
+        
+        [MenuItem(MenuGameObjectRootPath + nameof(ConvertQuadFromGrid))]
+        private static void ConvertQuadFromGrid()
+        {
+            var folder = EditorUtility.OpenFolderPanel("Export folder", "", "");
+            var relativeFolder = ConvertRelativePath(folder);
+            var materialFolder = System.IO.Path.Combine(relativeFolder, "materials");
+            if (!System.IO.Directory.Exists(materialFolder))
+                System.IO.Directory.CreateDirectory(materialFolder);
+
+            var fbxFolder = System.IO.Path.Combine(relativeFolder, "fbx");
+            if (!System.IO.Directory.Exists(fbxFolder))
+                System.IO.Directory.CreateDirectory(fbxFolder);
+
+            var activeGameObject = Selection.activeObject as GameObject;
+            GameObject.DestroyImmediate(activeGameObject.transform.Find("__Converted__")?.gameObject);
+            var convertRootObject = new GameObject("__Converted__");
+            convertRootObject.transform.SetParent(activeGameObject.transform, false);
+
+            Dictionary<Sprite, string> assetPathList = new Dictionary<Sprite, string>();
+
+            foreach (var obj in Selection.objects)
+            {
+                if (!(obj as GameObject).TryGetComponent<Grid>(out var gridComp))
+                    continue;
+
+                var tilemapList = gridComp.GetComponentsInChildren<Tilemap>();
+                foreach (var tilemap in tilemapList)
+                {
+                    for (int y = tilemap.cellBounds.y; y < tilemap.cellBounds.size.y; y++)
+                    {
+                        for (int x = tilemap.cellBounds.x; x < tilemap.cellBounds.size.x; x++)
+                        {
+                            var cellPosition = new Vector3Int(x, y);
+                            var sprite = tilemap.GetSprite(cellPosition);
+                            if (sprite == null)
+                                continue;
+
+                            if (!assetPathList.ContainsKey(sprite))
+                            {
+                                var extracted = CreateTextureFromSprite(sprite);
+                                SavePNG(extracted, folder);
+                                AssetDatabase.Refresh();
+
+                                var selectedTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(System.IO.Path.Combine(relativeFolder, extracted.name + ".png"));
+                                var materialPath = SaveMaterialFromPNG(selectedTexture, materialFolder);
+                                AssetDatabase.Refresh();
+
+                                assetPathList.Add(sprite, materialPath);
+                            }
+
+                            var selectedMaterial = AssetDatabase.LoadAssetAtPath<Material>(assetPathList[sprite]);
+
+                            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                            quad.GetComponent<Renderer>().material = selectedMaterial;
+                            quad.name = selectedMaterial.name;
+                                                        
+                            quad.transform.SetParent(convertRootObject.transform, false);
+                            quad.transform.localPosition = tilemap.CellToLocal(cellPosition);
+
+                            Debug.Log($"{cellPosition} {quad.name}");
+                        }
+                    }
+                }
+            }
+
+            //UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(fbxFolder, activeGameObject.name + ".fbx"), activeGameObject);
         }
         static string ConvertRelativePath(string absolutePath)
         {
