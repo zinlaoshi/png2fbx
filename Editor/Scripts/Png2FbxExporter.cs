@@ -63,7 +63,8 @@ namespace Zin.Png2Fbx.Editor
             // "myTexture2D" now has the same pixels from "texture" and it's re
             var output = new Texture2D((int)sprite.rect.width, (int)sprite.rect.height);
             var r = sprite.textureRect;
-            var pixels = myTexture2D.GetPixels((int)r.x, (int)r.y, (int)r.width, (int)r.height);
+            //var pixels = myTexture2D.GetPixels((int)r.x, (int)r.y, (int)r.width, (int)r.height);
+            var pixels = myTexture2D.GetPixels((int)r.x, (int)r.y, (int)sprite.rect.width, (int)sprite.rect.height);
 
             output.SetPixels(pixels);
             output.Apply();
@@ -205,8 +206,8 @@ namespace Zin.Png2Fbx.Editor
                 System.IO.Directory.CreateDirectory(fbxFolder);
 
             var activeGameObject = Selection.activeObject as GameObject;
-            GameObject.DestroyImmediate(activeGameObject.transform.Find("__Converted__")?.gameObject);
             var convertRootObject = new GameObject("__Converted__");
+            GameObject.DestroyImmediate(activeGameObject.transform.Find(convertRootObject.name)?.gameObject);            
             convertRootObject.transform.SetParent(activeGameObject.transform, false);
 
             Dictionary<Sprite, string> assetPathList = new Dictionary<Sprite, string>();
@@ -219,6 +220,9 @@ namespace Zin.Png2Fbx.Editor
                 var tilemapList = gridComp.GetComponentsInChildren<Tilemap>();
                 foreach (var tilemap in tilemapList)
                 {
+                    var tilemapObj = new GameObject(tilemap.name);
+                    tilemapObj.transform.SetParent(convertRootObject.transform);
+                    tilemapObj.transform.localPosition = tilemap.transform.localPosition + Vector3.back * tilemap.GetComponent<TilemapRenderer>().sortingOrder;
                     for (int y = tilemap.cellBounds.y; y < tilemap.cellBounds.size.y; y++)
                     {
                         for (int x = tilemap.cellBounds.x; x < tilemap.cellBounds.size.x; x++)
@@ -228,35 +232,72 @@ namespace Zin.Png2Fbx.Editor
                             if (sprite == null)
                                 continue;
 
-                            if (!assetPathList.ContainsKey(sprite))
-                            {
-                                var extracted = CreateTextureFromSprite(sprite);
-                                SavePNG(extracted, folder);
-                                AssetDatabase.Refresh();
-
-                                var selectedTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(System.IO.Path.Combine(relativeFolder, extracted.name + ".png"));
-                                var materialPath = SaveMaterialFromPNG(selectedTexture, materialFolder);
-                                AssetDatabase.Refresh();
-
-                                assetPathList.Add(sprite, materialPath);
-                            }
-
-                            var selectedMaterial = AssetDatabase.LoadAssetAtPath<Material>(assetPathList[sprite]);
-
-                            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                            quad.GetComponent<Renderer>().material = selectedMaterial;
-                            quad.name = selectedMaterial.name;
-                                                        
-                            quad.transform.SetParent(convertRootObject.transform, false);
-                            quad.transform.localPosition = tilemap.CellToLocal(cellPosition);
-
+                            var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition), sprite, folder, relativeFolder, materialFolder);
+                            
                             Debug.Log($"{cellPosition} {quad.name}");
                         }
                     }
+
+                    CreateQuadAll(tilemap.transform, assetPathList, tilemapObj.transform, folder, relativeFolder, materialFolder);                    
                 }
             }
 
             //UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(fbxFolder, activeGameObject.name + ".fbx"), activeGameObject);
+        }
+
+        static void CreateQuadAll(Transform target, Dictionary<Sprite, string> assetPathList, Transform parent, string folder, string relativeFolder, string materialFolder)
+        {
+            for (int i = 0; i < target.childCount; i++)
+            {
+                var child = target.GetChild(i);                
+
+                var spr = child.GetComponent<SpriteRenderer>();
+                if (spr == null || spr.sprite == null)
+                {
+                    var newObj = new GameObject(child.name);
+                    newObj.transform.SetParent(parent.transform);
+                    newObj.transform.localPosition = child.localPosition + new Vector3(-0.5f, -0.5f);
+
+                    CreateQuadAll(child, assetPathList, newObj.transform, folder, relativeFolder, materialFolder);
+                }
+                else
+                {
+                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition + Vector3.back * spr.sortingOrder, spr.sprite, folder, relativeFolder, materialFolder);
+                    quad.name = child.name;
+
+                    CreateQuadAll(child, assetPathList, quad.transform, folder, relativeFolder, materialFolder);
+                }                
+            }
+        }
+
+        static GameObject CreateQuadFromSprite(Dictionary<Sprite, string> assetPathList, Transform convertRootObject, Vector3 localPosition, Sprite sprite, string folder, string relativeFolder, string materialFolder)
+        {
+            if (!assetPathList.ContainsKey(sprite))
+            {
+                var extracted = CreateTextureFromSprite(sprite);
+                SavePNG(extracted, folder);
+                AssetDatabase.Refresh();
+
+                var selectedTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(System.IO.Path.Combine(relativeFolder, extracted.name + ".png"));
+                var materialPath = SaveMaterialFromPNG(selectedTexture, materialFolder);
+                AssetDatabase.Refresh();
+
+                assetPathList.Add(sprite, materialPath);
+            }
+
+            var selectedMaterial = AssetDatabase.LoadAssetAtPath<Material>(assetPathList[sprite]);
+
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.GetComponent<Renderer>().material = selectedMaterial;
+            quad.name = selectedMaterial.name;
+
+            quad.transform.SetParent(convertRootObject.transform, false);
+
+            var pivot = new Vector2((sprite.rect.width- sprite.pivot.x) / sprite.rect.width, (sprite.rect.height - sprite.pivot.y) / sprite.rect.height) - 0.5f * Vector2.one;
+            quad.transform.localScale = new Vector3(sprite.rect.width / sprite.pixelsPerUnit, sprite.rect.height / sprite.pixelsPerUnit, 1);
+            quad.transform.localPosition = localPosition + pivot.x * quad.transform.localScale.x * Vector3.right + pivot.y * quad.transform.localScale.y * Vector3.up;
+            
+            return quad;
         }
         static string ConvertRelativePath(string absolutePath)
         {
