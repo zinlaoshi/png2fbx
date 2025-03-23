@@ -195,6 +195,10 @@ namespace Zin.Png2Fbx.Editor
         [MenuItem(MenuGameObjectRootPath + nameof(ConvertQuadFromGrid))]
         private static void ConvertQuadFromGrid()
         {
+            var colorSpace = PlayerSettings.colorSpace;
+            if (colorSpace != ColorSpace.Gamma)
+                PlayerSettings.colorSpace = ColorSpace.Gamma;
+
             var folder = EditorUtility.OpenFolderPanel("Export folder", "", "");
             var relativeFolder = ConvertRelativePath(folder);
             var materialFolder = System.IO.Path.Combine(relativeFolder, "materials");
@@ -242,6 +246,7 @@ namespace Zin.Png2Fbx.Editor
                 }
             }
 
+            PlayerSettings.colorSpace = colorSpace;
             //UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(fbxFolder, activeGameObject.name + ".fbx"), activeGameObject);
         }
 
