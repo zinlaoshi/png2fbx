@@ -236,12 +236,12 @@ namespace Zin.Png2Fbx.Editor
                             if (sprite == null)
                                 continue;
                             
-                            var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition) + tilemap.GetTransformMatrix(cellPosition).GetPosition(), tilemap.GetTransformMatrix(cellPosition).rotation, sprite, folder, relativeFolder, materialFolder);
+                            var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition) - tilemap.GetTransformMatrix(cellPosition).GetPosition(), tilemap.GetTransformMatrix(cellPosition).rotation, sprite, folder, relativeFolder, materialFolder);
                             Debug.Log($"{cellPosition} {quad.name} {tilemap.GetTransformMatrix(cellPosition).GetPosition()}");
                         }
                     }
 
-                    CreateQuadAll(tilemap.transform, assetPathList, tilemapObj.transform, folder, relativeFolder, materialFolder);                    
+                    CreateQuadTilemapChildren(tilemap.transform, assetPathList, tilemapObj.transform, folder, relativeFolder, materialFolder, 0);
                 }
             }
 
@@ -249,8 +249,9 @@ namespace Zin.Png2Fbx.Editor
             //UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(fbxFolder, activeGameObject.name + ".fbx"), activeGameObject);
         }
 
-        static void CreateQuadAll(Transform target, Dictionary<Sprite, string> assetPathList, Transform parent, string folder, string relativeFolder, string materialFolder)
+        static void CreateQuadTilemapChildren(Transform target, Dictionary<Sprite, string> assetPathList, Transform parent, string folder, string relativeFolder, string materialFolder, int depth)
         {
+            var offsetPosition = (depth == 0 ? new Vector3(-0.5f, -0.5f) : Vector3.zero);
             for (int i = 0; i < target.childCount; i++)
             {
                 var child = target.GetChild(i);                
@@ -260,16 +261,16 @@ namespace Zin.Png2Fbx.Editor
                 {
                     var newObj = new GameObject(child.name);
                     newObj.transform.SetParent(parent.transform);
-                    newObj.transform.localPosition = child.localPosition + new Vector3(-0.5f, -0.5f);
+                    newObj.transform.localPosition = child.localPosition + offsetPosition;
 
-                    CreateQuadAll(child, assetPathList, newObj.transform, folder, relativeFolder, materialFolder);
+                    CreateQuadTilemapChildren(child, assetPathList, newObj.transform, folder, relativeFolder, materialFolder, depth + 1);
                 }
                 else
                 {
-                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition + Vector3.back * spr.sortingOrder, Quaternion.identity, spr.sprite, folder, relativeFolder, materialFolder);
+                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition + offsetPosition + Vector3.back * spr.sortingOrder, Quaternion.identity, spr.sprite, folder, relativeFolder, materialFolder);
                     quad.name = child.name;
 
-                    CreateQuadAll(child, assetPathList, quad.transform, folder, relativeFolder, materialFolder);
+                    CreateQuadTilemapChildren(child, assetPathList, quad.transform, folder, relativeFolder, materialFolder, depth + 1);
                 }                
             }
         }
