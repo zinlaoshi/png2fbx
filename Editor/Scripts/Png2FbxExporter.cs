@@ -233,7 +233,7 @@ namespace Zin.Png2Fbx.Editor
                         {
                             var cellPosition = new Vector3Int(x, y);
                             var sprite = tilemap.GetSprite(cellPosition);
-                            if (sprite == null)
+                            if (sprite == null || sprite.texture == null)
                                 continue;
                             
                             var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition) - tilemap.GetTransformMatrix(cellPosition).GetPosition(), tilemap.GetTransformMatrix(cellPosition).rotation, sprite, folder, relativeFolder, materialFolder);
