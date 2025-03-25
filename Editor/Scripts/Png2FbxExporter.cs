@@ -235,10 +235,9 @@ namespace Zin.Png2Fbx.Editor
                             var sprite = tilemap.GetSprite(cellPosition);
                             if (sprite == null)
                                 continue;
-
-                            var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition), sprite, folder, relativeFolder, materialFolder);
                             
-                            Debug.Log($"{cellPosition} {quad.name}");
+                            var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition) + tilemap.GetTransformMatrix(cellPosition).GetPosition(), tilemap.GetTransformMatrix(cellPosition).rotation, sprite, folder, relativeFolder, materialFolder);
+                            Debug.Log($"{cellPosition} {quad.name} {tilemap.GetTransformMatrix(cellPosition).GetPosition()}");
                         }
                     }
 
@@ -267,7 +266,7 @@ namespace Zin.Png2Fbx.Editor
                 }
                 else
                 {
-                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition + Vector3.back * spr.sortingOrder, spr.sprite, folder, relativeFolder, materialFolder);
+                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition + Vector3.back * spr.sortingOrder, Quaternion.identity, spr.sprite, folder, relativeFolder, materialFolder);
                     quad.name = child.name;
 
                     CreateQuadAll(child, assetPathList, quad.transform, folder, relativeFolder, materialFolder);
@@ -275,7 +274,7 @@ namespace Zin.Png2Fbx.Editor
             }
         }
 
-        static GameObject CreateQuadFromSprite(Dictionary<Sprite, string> assetPathList, Transform convertRootObject, Vector3 localPosition, Sprite sprite, string folder, string relativeFolder, string materialFolder)
+        static GameObject CreateQuadFromSprite(Dictionary<Sprite, string> assetPathList, Transform convertRootObject, Vector3 localPosition, Quaternion localRotation, Sprite sprite, string folder, string relativeFolder, string materialFolder)
         {
             if (!assetPathList.ContainsKey(sprite))
             {
@@ -297,11 +296,14 @@ namespace Zin.Png2Fbx.Editor
             quad.name = selectedMaterial.name;
 
             quad.transform.SetParent(convertRootObject.transform, false);
+            quad.transform.localPosition = Vector3.zero;
 
             var pivot = new Vector2((sprite.rect.width- sprite.pivot.x) / sprite.rect.width, (sprite.rect.height - sprite.pivot.y) / sprite.rect.height) - 0.5f * Vector2.one;
-            quad.transform.localScale = new Vector3(sprite.rect.width / sprite.pixelsPerUnit, sprite.rect.height / sprite.pixelsPerUnit, 1);
-            quad.transform.localPosition = localPosition + pivot.x * quad.transform.localScale.x * Vector3.right + pivot.y * quad.transform.localScale.y * Vector3.up;
             
+            quad.transform.localScale = new Vector3(sprite.rect.width / sprite.pixelsPerUnit, sprite.rect.height / sprite.pixelsPerUnit, 1);
+            var pivot2 = pivot.x * quad.transform.localScale.x * Vector3.right + pivot.y * quad.transform.localScale.y * Vector3.up;            
+            quad.transform.localPosition = localPosition + pivot2;
+            quad.transform.RotateAround(quad.transform.position - pivot2, Vector3.forward, localRotation.eulerAngles.z);
             return quad;
         }
         static string ConvertRelativePath(string absolutePath)
