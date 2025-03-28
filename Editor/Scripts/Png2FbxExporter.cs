@@ -70,6 +70,8 @@ namespace Zin.Png2Fbx.Editor
             output.Apply();
             output.name = myTexture2D.name + sprite.name;
 
+            GameObject.DestroyImmediate(myTexture2D);
+
             return output;
         }
 
@@ -106,7 +108,7 @@ namespace Zin.Png2Fbx.Editor
         }
         static string SaveMaterialFromPNG(Texture2D selected, string saveToDirectory)
         {
-            var material = new Material(Shader.Find("Unlit/Texture"));
+            var material = new Material(Shader.Find("Sprites/Default"));
             material.mainTexture = selected;
 
             var newAssetName = System.IO.Path.Combine(saveToDirectory, selected.name + ".mat");
@@ -140,7 +142,7 @@ namespace Zin.Png2Fbx.Editor
             quad.GetComponent<Renderer>().material = selected;
             quad.name = selected.name;
 
-            UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(saveToDirectory, selected.name + ".fbx"), quad);
+            //UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(saveToDirectory, selected.name + ".fbx"), quad);
 
             GameObject.DestroyImmediate(quad);
         }
@@ -227,21 +229,26 @@ namespace Zin.Png2Fbx.Editor
                     var tilemapObj = new GameObject(tilemap.name);
                     tilemapObj.transform.SetParent(convertRootObject.transform);
                     tilemapObj.transform.localPosition = tilemap.transform.localPosition + Vector3.back * tilemap.GetComponent<TilemapRenderer>().sortingOrder;
+
+                    var tilemapPosObj = new GameObject("pos");
+                    tilemapPosObj.transform.SetParent(tilemapObj.transform);
+                    tilemapPosObj.transform.localPosition = (Vector2.one * 0.5f);
+
                     for (int y = tilemap.cellBounds.y; y < tilemap.cellBounds.size.y; y++)
                     {
                         for (int x = tilemap.cellBounds.x; x < tilemap.cellBounds.size.x; x++)
                         {
                             var cellPosition = new Vector3Int(x, y);
                             var sprite = tilemap.GetSprite(cellPosition);
-                            if (sprite == null || sprite.texture == null)
+                            if (sprite == null || sprite.texture == null || string.IsNullOrEmpty(sprite.name))
                                 continue;
 
-                            var quad = CreateQuadFromSprite(assetPathList, tilemapObj.transform, tilemap.CellToLocal(cellPosition) + tilemap.GetTransformMatrix(cellPosition).GetPosition(), tilemap.GetTransformMatrix(cellPosition).rotation, sprite, folder, relativeFolder, materialFolder);
+                            var quad = CreateQuadFromSprite(assetPathList, tilemapPosObj.transform, tilemap.CellToLocal(cellPosition) + tilemap.GetTransformMatrix(cellPosition).GetPosition(), tilemap.GetTransformMatrix(cellPosition).rotation, Vector3.one, sprite, folder, relativeFolder, materialFolder, out var pivot2);
                             Debug.Log($"{cellPosition} {quad.name} {tilemap.GetTransformMatrix(cellPosition).GetPosition()}");
                         }
                     }
 
-                    CreateQuadTilemapChildren(tilemap.transform, assetPathList, tilemapObj.transform, folder, relativeFolder, materialFolder, 0);
+                    CreateQuadTilemapChildren(tilemap.transform, assetPathList, tilemapObj.transform, Vector3.zero, folder, relativeFolder, materialFolder, 0);
                 }
             }
 
@@ -249,33 +256,34 @@ namespace Zin.Png2Fbx.Editor
             //UnityEditor.Formats.Fbx.Exporter.ModelExporter.ExportObject(System.IO.Path.Combine(fbxFolder, activeGameObject.name + ".fbx"), activeGameObject);
         }
 
-        static void CreateQuadTilemapChildren(Transform target, Dictionary<Sprite, string> assetPathList, Transform parent, string folder, string relativeFolder, string materialFolder, int depth)
+        static void CreateQuadTilemapChildren(Transform target, Dictionary<Sprite, string> assetPathList, Transform parent, Vector3 parentPivot, string folder, string relativeFolder, string materialFolder, int depth)
         {
-            var offsetPosition = (depth == 0 ? new Vector3(-0.5f, -0.5f) : Vector3.zero);
             for (int i = 0; i < target.childCount; i++)
             {
                 var child = target.GetChild(i);
 
                 var spr = child.GetComponent<SpriteRenderer>();
-                if (spr == null || spr.sprite == null)
+                if (spr == null || spr.sprite == null || string.IsNullOrEmpty(spr.sprite.name))
                 {
                     var newObj = new GameObject(child.name);
-                    newObj.transform.SetParent(parent.transform);
-                    newObj.transform.localPosition = child.localPosition + offsetPosition;
+                    newObj.transform.localScale = child.localScale;
+                    newObj.transform.SetParent(parent.transform, true);
+                    newObj.transform.localPosition = child.localPosition;
+                    newObj.transform.rotation = child.rotation;
 
-                    CreateQuadTilemapChildren(child, assetPathList, newObj.transform, folder, relativeFolder, materialFolder, depth + 1);
+                    CreateQuadTilemapChildren(child, assetPathList, newObj.transform, Vector3.zero, folder, relativeFolder, materialFolder, depth + 1);
                 }
                 else
                 {
-                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition + offsetPosition + Vector3.back * spr.sortingOrder, Quaternion.identity, spr.sprite, folder, relativeFolder, materialFolder);
+                    var quad = CreateQuadFromSprite(assetPathList, parent, child.localPosition - parentPivot, child.localRotation, child.localScale, spr.sprite, folder, relativeFolder, materialFolder, out var pivot2);
                     quad.name = child.name;
-
-                    CreateQuadTilemapChildren(child, assetPathList, quad.transform, folder, relativeFolder, materialFolder, depth + 1);
+                    quad.transform.position = new Vector3(quad.transform.position.x, quad.transform.position.y, -spr.sortingOrder);
+                    CreateQuadTilemapChildren(child, assetPathList, quad.transform, pivot2, folder, relativeFolder, materialFolder, depth + 1);
                 }
             }
         }
 
-        static GameObject CreateQuadFromSprite(Dictionary<Sprite, string> assetPathList, Transform convertRootObject, Vector3 localPosition, Quaternion localRotation, Sprite sprite, string folder, string relativeFolder, string materialFolder)
+        static GameObject CreateQuadFromSprite(Dictionary<Sprite, string> assetPathList, Transform convertRootObject, Vector3 localPosition, Quaternion localRotation, Vector3 localScale, Sprite sprite, string folder, string relativeFolder, string materialFolder, out Vector3 pivot2)
         {
             if (!assetPathList.ContainsKey(sprite))
             {
@@ -296,15 +304,15 @@ namespace Zin.Png2Fbx.Editor
             quad.GetComponent<Renderer>().material = selectedMaterial;
             quad.name = selectedMaterial.name;
 
-            quad.transform.SetParent(convertRootObject.transform, false);
-            quad.transform.localPosition = Vector3.zero;
+            quad.transform.localScale = new Vector3(sprite.rect.width / sprite.pixelsPerUnit, sprite.rect.height / sprite.pixelsPerUnit, 1);
+            quad.transform.localScale = Vector3.Scale(quad.transform.localScale, localScale);
+            quad.transform.SetParent(convertRootObject.transform, true);
 
             var pivot = new Vector2((sprite.rect.width - sprite.pivot.x) / sprite.rect.width, (sprite.rect.height - sprite.pivot.y) / sprite.rect.height) - 0.5f * Vector2.one;
-
-            quad.transform.localScale = new Vector3(sprite.rect.width / sprite.pixelsPerUnit, sprite.rect.height / sprite.pixelsPerUnit, 1);
-            var pivot2 = pivot.x * quad.transform.localScale.x * Vector3.right + pivot.y * quad.transform.localScale.y * Vector3.up;
+            pivot2 = pivot.x * quad.transform.localScale.x * Vector3.right + pivot.y * quad.transform.localScale.y * Vector3.up;
             quad.transform.localPosition = localPosition + pivot2;
             quad.transform.RotateAround(quad.transform.position - pivot2, Vector3.forward, localRotation.eulerAngles.z);
+
             return quad;
         }
         static string ConvertRelativePath(string absolutePath)
